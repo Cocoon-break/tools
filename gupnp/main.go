@@ -108,11 +108,11 @@ func DeleteCmd() cli.Command {
 				Value: "TCP",
 				Usage: "TCP or UDP protocol,default TCP",
 			},
-			&cli.IntSliceFlag{
+			&cli.Int64SliceFlag{
 				Name:  "eport",
 				Usage: "--eport 1111 --eport 2222 external port [1111,2222] will be delete",
 			},
-			&cli.IntSliceFlag{
+			&cli.Int64SliceFlag{
 				Name:  "iport",
 				Usage: "--eport 1111 --eport 2222 internal port [1111,2222] will be delete",
 			},
