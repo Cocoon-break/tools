@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 
 	"tools/pkg/upnp"
@@ -30,7 +31,9 @@ func main() {
 			return err
 		}
 		gm := w.GetGenericPortMappingEntryCtx(context.Background())
-		zlog.Info("upup_generic_mapping", zlog.Any("mapping", gm))
+		for _, m := range gm {
+			zlog.Info("upup_generic_mapping", zlog.Any("mapping", m))
+		}
 		return nil
 	}
 	if err := app.Run(os.Args); err != nil {
@@ -70,6 +73,9 @@ func AddCmd() cli.Command {
 			i := c.String("interface")
 			eport := c.Uint64("eport")
 			iport := c.Uint64("iport")
+			if !isValidPort(eport) || !isValidPort(iport) {
+				return errors.New("invalid port")
+			}
 			ipv4, err := GetIpV4ByName(i)
 			if err != nil {
 				return err
@@ -85,7 +91,7 @@ func AddCmd() cli.Command {
 			if errs := w.AddPortMappingCtx(context.Background(), upnp.Proto(proto), uint16(eport), uint16(iport), ipv4, "wsp for upnp"); len(errs) > 0 {
 				return errs[0]
 			}
-			zlog.Info("upup_add_mapping", zlog.Any("external_port", eport), zlog.Any("internal_port", iport), zlog.Any("internal_ip", ipv4))
+			zlog.Info("upup_add_mapping_success", zlog.Any("proto", proto), zlog.Any("external_port", eport), zlog.Any("internal_port", iport), zlog.Any("internal_ip", ipv4))
 			return nil
 		},
 	}
@@ -95,22 +101,36 @@ func DeleteCmd() cli.Command {
 	return cli.Command{
 		Name:    "delete",
 		Aliases: []string{"d"},
-		Usage:   "delete upnp port mapping",
+		Usage:   "delete upnp port mapping by batch",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "proto",
 				Value: "TCP",
 				Usage: "TCP or UDP protocol,default TCP",
 			},
-			&cli.Uint64Flag{
+			&cli.IntSliceFlag{
 				Name:  "eport",
-				Value: 0,
-				Usage: "external port will be delete",
+				Usage: "--eport 1111 --eport 2222 external port [1111,2222] will be delete",
+			},
+			&cli.IntSliceFlag{
+				Name:  "iport",
+				Usage: "--eport 1111 --eport 2222 internal port [1111,2222] will be delete",
 			},
 		},
 		Action: func(c *cli.Context) error {
 			proto := c.String("proto")
-			eport := c.Uint64("eport")
+			eports := c.Int64Slice("eport")
+			iports := c.Int64Slice("iport")
+			for _, e := range eports {
+				if !isValidPort(uint64(e)) {
+					return errors.New("invalid external port")
+				}
+			}
+			for _, i := range iports {
+				if !isValidPort(uint64(i)) {
+					return errors.New("invalid internal port")
+				}
+			}
 			t := upnp.FindUPNPTargetCtx(context.Background())
 			if t == "" {
 				return errors.New("not found valid upnp target")
@@ -119,10 +139,35 @@ func DeleteCmd() cli.Command {
 			if err != nil {
 				return err
 			}
-			if errs := w.DeletePortMappingCtx(context.Background(), upnp.Proto(proto), uint16(eport)); len(errs) > 0 {
-				return errs[0]
+			gm := w.GetGenericPortMappingEntryCtx(context.Background())
+			shouldDeleteMap := make(map[string]upnp.MappingEntry, len(gm))
+			for _, m := range gm {
+				if m.Proto != proto {
+					continue
+				}
+				for _, e := range eports {
+					if m.ExternalPort == uint16(e) {
+						shouldDeleteMap[m.Uuid] = m
+					}
+				}
+				for _, e := range iports {
+					if m.InternalPort == uint16(e) {
+						shouldDeleteMap[m.Uuid] = m
+					}
+				}
+			}
+			for _, m := range shouldDeleteMap {
+				if errs := w.DeletePortMappingCtx(context.Background(), upnp.Proto(m.Proto), m.ExternalPort); len(errs) > 0 {
+					zlog.Error("upnp_delete_mapping failed", zlog.Any("mapping", m), zlog.Any("err", errs[0]))
+					continue
+				}
+				zlog.Info("upnp_delete_mapping success", zlog.Any("mapping", m))
 			}
 			return nil
 		},
 	}
+}
+
+func isValidPort(port uint64) bool {
+	return port > 0 && port <= math.MaxUint16
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/huin/goupnp"
 	"github.com/huin/goupnp/dcps/internetgateway1"
+	uuid "github.com/satori/go.uuid"
 )
 
 type ConnectionClient interface {
@@ -15,6 +16,7 @@ type ConnectionClient interface {
 	DeletePortMappingCtx(ctx context.Context, NewRemoteHost string, NewExternalPort uint16, NewProtocol string) error
 }
 type MappingEntry struct {
+	Uuid           string `json:"-"`
 	Proto          string `json:"proto"`
 	ExternalPort   uint16 `json:"external_port"`
 	InternalPort   uint16 `json:"internal_port"`
@@ -77,12 +79,7 @@ func (u *UPNPWrapper) GetGenericPortMappingEntryCtx(ctx context.Context) []Mappi
 			if err != nil {
 				break
 			}
-			mappingList = append(mappingList, MappingEntry{
-				Proto:          protocol,
-				ExternalPort:   externalPort,
-				InternalPort:   internalPort,
-				InternalClient: internalClient,
-			})
+			mappingList = append(mappingList, buildMappingEntry(Proto(protocol), externalPort, internalPort, internalClient))
 		}
 	}
 	return mappingList
@@ -101,12 +98,7 @@ func (u *UPNPWrapper) GetSpecificPortMappingEntryCtx(ctx context.Context, proto 
 			if err != nil {
 				break
 			}
-			mappingList = append(mappingList, MappingEntry{
-				Proto:          string(proto),
-				ExternalPort:   p,
-				InternalPort:   internalPort,
-				InternalClient: internalClient,
-			})
+			mappingList = append(mappingList, buildMappingEntry(proto, uint16(p), internalPort, internalClient))
 		}
 	}
 	return mappingList
@@ -147,6 +139,16 @@ func (u *UPNPWrapper) DeletePortMappingCtx(ctx context.Context, proto Proto, ext
 		}
 	}
 	return errs
+}
+
+func buildMappingEntry(proto Proto, externalPort uint16, internalPort uint16, internalClient string) MappingEntry {
+	return MappingEntry{
+		Uuid:           uuid.NewV4().String(),
+		Proto:          string(proto),
+		ExternalPort:   externalPort,
+		InternalPort:   internalPort,
+		InternalClient: internalClient,
+	}
 }
 
 // 找到upnp支持的服务类型，目前仅支持urn:schemas-upnp-org:service:WANIPConnection:1"和"urn:schemas-upnp-org:service:WANPPPConnection:1"

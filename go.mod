@@ -12,6 +12,7 @@ require (
 require (
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible
+	github.com/satori/go.uuid v1.2.0
 	github.com/urfave/cli v1.22.15
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
