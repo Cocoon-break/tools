@@ -34,6 +34,8 @@ func main() {
 		for _, m := range gm {
 			zlog.Info("upup_generic_mapping", zlog.Any("mapping", m))
 		}
+		externalIp, _ := w.GetExternalIPAddress()
+		zlog.Info("upnp_external_ip", zlog.Any("ip", externalIp))
 		return nil
 	}
 	if err := app.Run(os.Args); err != nil {

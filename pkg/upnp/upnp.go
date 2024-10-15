@@ -2,6 +2,7 @@ package upnp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/huin/goupnp"
@@ -14,13 +15,15 @@ type ConnectionClient interface {
 	GetSpecificPortMappingEntryCtx(ctx context.Context, NewRemoteHost string, NewExternalPort uint16, NewProtocol string) (NewInternalPort uint16, NewInternalClient string, NewEnabled bool, NewPortMappingDescription string, NewLeaseDuration uint32, err error)
 	AddPortMappingCtx(ctx context.Context, NewRemoteHost string, NewExternalPort uint16, NewProtocol string, NewInternalPort uint16, NewInternalClient string, NewEnabled bool, NewPortMappingDescription string, NewLeaseDuration uint32) (err error)
 	DeletePortMappingCtx(ctx context.Context, NewRemoteHost string, NewExternalPort uint16, NewProtocol string) error
+	GetExternalIPAddress() (NewExternalIPAddress string, err error)
 }
 type MappingEntry struct {
-	Uuid           string `json:"-"`
-	Proto          string `json:"proto"`
-	ExternalPort   uint16 `json:"external_port"`
-	InternalPort   uint16 `json:"internal_port"`
-	InternalClient string `json:"internal_ip"`
+	Uuid            string `json:"-"`
+	Proto           string `json:"proto"`
+	ExternalPort    uint16 `json:"external_port"`
+	InternalPort    uint16 `json:"internal_port"`
+	InternalClient  string `json:"internal_ip"`
+	PortMappingDesc string `json:"port_mapping_desc"`
 }
 
 type Proto string
@@ -75,14 +78,25 @@ func (u *UPNPWrapper) GetGenericPortMappingEntryCtx(ctx context.Context) []Mappi
 	mappingList := make([]MappingEntry, 0, 8)
 	for _, client := range u.clients {
 		for i := 0; true; i++ {
-			_, externalPort, protocol, internalPort, internalClient, _, _, _, err := client.GetGenericPortMappingEntryCtx(ctx, uint16(i))
+			_, externalPort, protocol, internalPort, internalClient, _, desc, _, err := client.GetGenericPortMappingEntryCtx(ctx, uint16(i))
 			if err != nil {
 				break
 			}
-			mappingList = append(mappingList, buildMappingEntry(Proto(protocol), externalPort, internalPort, internalClient))
+			mappingList = append(mappingList, buildMappingEntry(Proto(protocol), externalPort, internalPort, internalClient, desc))
 		}
 	}
 	return mappingList
+}
+
+func (u *UPNPWrapper) GetExternalIPAddress() (string, error) {
+	for _, client := range u.clients {
+		ip, err := client.GetExternalIPAddress()
+		if err != nil {
+			continue
+		}
+		return ip, nil
+	}
+	return "", errors.New("not found external ip")
 }
 
 func (u *UPNPWrapper) GetSpecificPortMappingEntry(proto Proto, externalPorts []uint16) []MappingEntry {
@@ -94,11 +108,11 @@ func (u *UPNPWrapper) GetSpecificPortMappingEntryCtx(ctx context.Context, proto 
 	mappingList := make([]MappingEntry, 0, 8)
 	for _, client := range u.clients {
 		for _, p := range externalPorts {
-			internalPort, internalClient, _, _, _, err := client.GetSpecificPortMappingEntryCtx(ctx, "", uint16(p), string(proto))
+			internalPort, internalClient, _, desc, _, err := client.GetSpecificPortMappingEntryCtx(ctx, "", uint16(p), string(proto))
 			if err != nil {
 				break
 			}
-			mappingList = append(mappingList, buildMappingEntry(proto, uint16(p), internalPort, internalClient))
+			mappingList = append(mappingList, buildMappingEntry(proto, uint16(p), internalPort, internalClient, desc))
 		}
 	}
 	return mappingList
@@ -141,13 +155,14 @@ func (u *UPNPWrapper) DeletePortMappingCtx(ctx context.Context, proto Proto, ext
 	return errs
 }
 
-func buildMappingEntry(proto Proto, externalPort uint16, internalPort uint16, internalClient string) MappingEntry {
+func buildMappingEntry(proto Proto, externalPort uint16, internalPort uint16, internalClient, desc string) MappingEntry {
 	return MappingEntry{
-		Uuid:           uuid.NewV4().String(),
-		Proto:          string(proto),
-		ExternalPort:   externalPort,
-		InternalPort:   internalPort,
-		InternalClient: internalClient,
+		Uuid:            uuid.NewV4().String(),
+		Proto:           string(proto),
+		ExternalPort:    externalPort,
+		InternalPort:    internalPort,
+		InternalClient:  internalClient,
+		PortMappingDesc: desc,
 	}
 }
 
